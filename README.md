@@ -1,13 +1,15 @@
-# Sample Hardhat Project
+# مشروع PLSN
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+عملة رقمية مبنية على البلوكشين، تهدف لدعم التضامن مع الشعوب المتضررة من الحروب والكوارث، وتوفير نظام شفاف وآمن للتبرعات الرقمية.
 
-Try running some of the following tasks:
+## المتطلبات
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.js
+- Node.js (يفضّل الإصدار 16 أو أحدث)
+- Hardhat (أداة تطوير العقود الذكية)
+- Git
+
+## التثبيت
+
+```bash
+npm install
 ```

@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20CappedUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
-contract PLSNUpgradeable is Initializable, ERC20Upgradeable, ERC20CappedUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract PLSNUpgradeable is
+    Initializable,
+    ERC20Upgradeable,
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     uint256 public taxBasisPoints;
     address public donationWallet;
     address public liquidityWallet;
@@ -16,25 +20,24 @@ contract PLSNUpgradeable is Initializable, ERC20Upgradeable, ERC20CappedUpgradea
     bool public taxEnabled;
     bool public paused;
 
-    // وقت الإطلاق ومدة التحديث
     uint256 public launchTime;
     uint256 public updatesAllowedPeriod;
 
-    modifier onlyDuringUpdatePeriod() {
-        require(block.timestamp <= launchTime + updatesAllowedPeriod, "Updates locked");
-        _;
-    }
-
-    // الحماية من البوتات
     bool public tradingEnabled;
     uint256 public launchBlock;
     uint256 public botProtectionBlocks;
+
     mapping(address => bool) public isExcludedFromProtection;
     mapping(address => bool) public isBlacklisted;
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
+    uint256 private _cap;
+
+    modifier onlyDuringUpdatePeriod() {
+        require(
+            block.timestamp <= launchTime + updatesAllowedPeriod,
+            "Updates period expired"
+        );
+        _;
     }
 
     function initialize(
@@ -46,7 +49,6 @@ contract PLSNUpgradeable is Initializable, ERC20Upgradeable, ERC20CappedUpgradea
         address developmentWallet_
     ) public initializer {
         __ERC20_init(name_, symbol_);
-        __ERC20Capped_init(100_000_000 * 10 ** decimals()); // حد أقصى 100 مليون
         __Ownable_init();
         __ReentrancyGuard_init();
 
@@ -54,9 +56,9 @@ contract PLSNUpgradeable is Initializable, ERC20Upgradeable, ERC20CappedUpgradea
         donationWallet = donationWallet_;
         liquidityWallet = liquidityWallet_;
         developmentWallet = developmentWallet_;
-
         taxEnabled = true;
         paused = false;
+
         tradingEnabled = false;
         botProtectionBlocks = 5;
         isExcludedFromProtection[msg.sender] = true;
@@ -64,10 +66,20 @@ contract PLSNUpgradeable is Initializable, ERC20Upgradeable, ERC20CappedUpgradea
         launchTime = block.timestamp;
         updatesAllowedPeriod = 30 days;
 
+        _cap = 200_000_000 * 10 ** decimals(); // ✅ الحد الأقصى الجديد: 200 مليون
         _mint(msg.sender, initialSupply_ * 10 ** decimals());
     }
 
-    // == التعديلات خلال فترة السماح ==
+    function cap() public view returns (uint256) {
+        return _cap;
+    }
+
+    function _mint(address to, uint256 amount) internal override {
+        require(totalSupply() + amount <= cap(), "Cap exceeded");
+        super._mint(to, amount);
+    }
+
+    // == تحديثات قابلة للتعطيل بعد الإطلاق ==
     function setTaxEnabled(bool _enabled) external onlyOwner onlyDuringUpdatePeriod {
         taxEnabled = _enabled;
     }
@@ -102,14 +114,14 @@ contract PLSNUpgradeable is Initializable, ERC20Upgradeable, ERC20CappedUpgradea
         launchBlock = block.number;
     }
 
-    // == التحويل ==
+    // == التحويل مع الحماية والضريبة ==
     function _transfer(address sender, address recipient, uint256 amount) internal override nonReentrant {
         require(!isBlacklisted[sender] && !isBlacklisted[recipient], "Blacklisted");
 
         if (!isExcludedFromProtection[sender] && !isExcludedFromProtection[recipient]) {
-            require(tradingEnabled, "Trading not enabled");
+            require(tradingEnabled, "Trading not yet enabled");
             if (block.number <= launchBlock + botProtectionBlocks) {
-                revert("Anti-bot: Wait");
+                revert("Anti-bot: Wait for trading window");
             }
         }
 
@@ -130,9 +142,4 @@ contract PLSNUpgradeable is Initializable, ERC20Upgradeable, ERC20CappedUpgradea
 
         super._transfer(sender, recipient, amountAfterTax);
     }
-
-    // == سك التوكن مع احترام الحد الأقصى ==
-    function _mint(address to, uint256 amount) internal override(ERC20Upgradeable, ERC20CappedUpgradeable) {
-        super._mint(to, amount);
-    }
-
+}
